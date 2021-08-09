@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes>
+  <vType id="CarA" vClass="passenger" tau="1" length="4" minGap="0"/>
+  <route id="route01" edges="12"/>
+  <vehicle depart="0" id="veh0" route="route01" type="CarA" />
+  <vehicle depart="1" id="veh1" route="route01" type="CarA" />
+  <vehicle depart="2" id="veh2" route="route01" type="CarA" />
+  <vehicle depart="3" id="veh3" route="route01" type="CarA" />
+  <vehicle depart="4" id="veh4" route="route01" type="CarA" />
+</routes>

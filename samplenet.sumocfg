@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2021-06-28 11:06:45 by Eclipse SUMO GUI Version 1.9.2
+-->
+
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="C:\Program Files (x86)\Eclipse\Sumo\samplenet.net.xml"/>
+        <route-files value="C:\Program Files (x86)\Eclipse\Sumo\samplenet.rou.xml"/>
+    </input>
+	<time>
+        <begin value="0"/>
+		<end value="3600"/>
+		<step-length value="1"/>
+    </time>
+	
+	
+
+</configuration>
