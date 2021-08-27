@@ -37,17 +37,19 @@ class Policy(nn.Module):
     """
     def __init__(self):
         super(Policy, self).__init__()
-        self.affine1 = nn.Linear(18, 128)
+        self.affine1 = nn.Linear(8, 128)
+        self.affine2 = nn.Linear(128, 128)
+        self.affine3 = nn.Linear(128, 64)
         #print("hidden layer", self.affine1.weight)
         # actor's layer
         # the number of actions is 4, leading vehicle is not controlled
-        self.policy_mean = nn.Linear(128, 4)
-        self.policy_log_std = nn.Linear(128,4)
+        self.policy_mean = nn.Linear(64, 4)
+        self.policy_log_std = nn.Linear(64,4)
         #5 vehicles, each has 5 gear values to choose
         #self.gear = nn.Linear(128,25)
 
         # critic's layer
-        self.value_head = nn.Linear(128, 1)
+        self.value_head = nn.Linear(64, 1)
 
         # action & reward buffer
         self.saved_actions = []
@@ -59,6 +61,10 @@ class Policy(nn.Module):
         """
         
         x = self.affine1(x)
+        x = F.relu(x)
+        x = self.affine2(x)
+        x = F.relu(x)
+        x = self.affine3(x)
         x = F.relu(x)
         #x = F.relu(self.affine1(x))
         #if torch.any(torch.isnan(x)):
@@ -89,7 +95,7 @@ class Policy(nn.Module):
         return mean, log_std, state_values
 		
 model = Policy()
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
+optimizer = optim.Adam(model.parameters(), lr=1e-6)
 eps = np.finfo(np.float32).eps.item()
 scaler = MinMaxScaler()
 
@@ -128,12 +134,13 @@ def sumo_reset():
 	
 def select_action(current_pos, current_speed, current_posdev, current_speeddev, epsilon=1e-6):
 
-    current_state = np.append(current_pos, current_speed)
-    current_state = np.append(current_state, current_posdev)
-    current_state = np.append(current_state, current_speeddev)
+    #current_state = np.append(current_pos, current_speed)
+    #current_state = np.append(current_state, current_posdev)
+    #current_state = np.append(current_state, current_speeddev)
+    current_state = np.append(current_posdev, current_speeddev)
     current_state = current_state.reshape(-1,1)
     current_state = scaler.fit_transform(current_state)
-    current_state = current_state.reshape(18,)
+    current_state = current_state.reshape(8,)
     current_state = torch.from_numpy(current_state).float()
     normal_mean, normal_log_std, state_value = model(current_state)
     normal_std = normal_log_std.exp()
@@ -143,9 +150,10 @@ def select_action(current_pos, current_speed, current_posdev, current_speeddev, 
 
     normal = Normal(0, 1)
     z0      = normal.sample()
-    action = 5*torch.tanh(normal_mean + normal_std*z0)
+    action = 2.5*torch.tanh(normal_mean + normal_std*z0)
     
-    model.saved_actions.append(SavedAction(Normal(normal_mean, normal_std).log_prob(normal_mean+ normal_std*z0) + torch.log(25 - action.pow(2) + epsilon), state_value))     
+    #model.saved_actions.append(SavedAction(Normal(normal_mean, normal_std).log_prob(normal_mean+ normal_std*z0) + torch.log(25 - action.pow(2) + epsilon), state_value))     
+    model.saved_actions.append(SavedAction(Normal(normal_mean, normal_std).log_prob(normal_mean+ normal_std*z0), state_value))
     #model.saved_actions.append(SavedAction(Normal(normal_mean, normal_std).log_prob(normal_mean+ normal_std*z0), state_value))
     
     return action.detach().numpy()
@@ -186,17 +194,18 @@ def take_action(current_pos, current_speed, current_posdev, current_speeddev, ac
     for order in range(4): 
           
         updated_speed_dev[order] = updated_speed[order]-updated_speed[order+1]
-        updated_pos_dev[order] = (updated_pos[order]-updated_pos[order+1])/(updated_speed[order+1] + 0.0001)
+        updated_pos_dev[order] = (updated_pos[order]-updated_pos[order+1])/(updated_speed[order+1] + 0.001)
         #updated_pos_dev[order] = (updated_pos[order]-updated_pos[order+1])
             
-        if updated_pos_dev[order] >= 1:
-            reward = reward - np.square(updated_pos_dev[order]-1) - np.square(updated_speed_dev[order])
-            #reward = -np.sum(np.square(updated_pos_dev-1)) - np.sum(np.square(updated_speed_dev))
-        else:
-            reward = reward - 100
+        if updated_pos_dev[order] >= 1.3:
+            reward = reward - np.square(updated_pos_dev[order]-1.3)-np.square(updated_speed_dev[order]) - np.square(current_speed[order+1] + action[order] - updated_speed[order+1])
+            #reward = reward - np.log(np.square(updated_pos_dev[order]-1)) - np.square(updated_speed_dev[order]) - np.square(action[order])
         
-        #reward = reward + (25-np.square(action)).sum()
-            
+        else:
+            reward = reward - 10000
+        
+        #reward = reward + (25-np.square(action)).sum()、
+    
     return updated_pos.astype(np.float32), updated_speed.astype(np.float32), updated_pos_dev.astype(np.float32), updated_speed_dev.astype(np.float32), reward.astype(np.float32)
     
 def finish_episode():
@@ -211,6 +220,12 @@ def finish_episode():
     
     del(model.rewards[-1])
     del(saved_actions[-1])
+    
+    #scaling = np.array([model.rewards]).reshape(-1,1)
+    #scaling = scaler.fit_transform(scaling)
+    #scaling = scaling.reshape(scaling.shape[0],)
+    #model.rewards = scaling.tolist()
+    
 
     # calculate the true value using rewards returned from the environment
     for r in model.rewards[::-1]:
@@ -279,7 +294,7 @@ def main():
     traci.start([sumoBinary, "-c", "samplenet.sumocfg",
                              "--tripinfo-output", "tripinfo.xml"])
     
-    num_episode = 10000
+    num_episode = 50000
          
     A = np.zeros((num_episode, 200, 4))
     P = np.zeros((num_episode, 200, 5))
